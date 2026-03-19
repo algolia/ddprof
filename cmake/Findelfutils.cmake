@@ -25,28 +25,44 @@ set(VER_ELF
     CACHE STRING "elfutils version")
 set(ELFUTILS_PATH ${VENDOR_PATH}/elfutils-${VER_ELF})
 
-set(LIBDW_PATH ${ELFUTILS_PATH}/lib/libdw.a)
-set(LIBELF_PATH ${ELFUTILS_PATH}/lib/libelf.a)
-set(LIBEU_PATH ${ELFUTILS_PATH}/src/lib/libeu.a)
-
 set(ELFUTILS_INCLUDE_DIRS ${ELFUTILS_PATH}/include)
 
-if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Release" AND NOT "${CMAKE_BUILD_TYPE}" STREQUAL
-                                                    "RelWithDebInfo")
-  # Variable can contain several args as it is quoted
-  set(EXTRA_CFLAGS "-O0 -g")
-  message(STATUS "elfutils - Adding compilation flags ${EXTRA_CFLAGS}")
+if(DDPROF_FETCH_ELFUTILS)
+  set(LIBDW_PATH ${ELFUTILS_PATH}/lib/libdw.a)
+  set(LIBELF_PATH ${ELFUTILS_PATH}/lib/libelf.a)
+  set(LIBEU_PATH ${ELFUTILS_PATH}/src/lib/libeu.a)
+
+  if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Release" AND NOT "${CMAKE_BUILD_TYPE}" STREQUAL
+                                                      "RelWithDebInfo")
+    # Variable can contain several args as it is quoted
+    set(EXTRA_CFLAGS "-O0 -g")
+    message(STATUS "elfutils - Adding compilation flags ${EXTRA_CFLAGS}")
+  endif()
+
+  message(
+    STATUS
+      "${CMAKE_SOURCE_DIR}/tools/fetch_elfutils.sh ${VER_ELF} ${SHA256_ELF} ${ELFUTILS_PATH} ${CMAKE_C_COMPILER} ${EXTRA_CFLAGS}"
+  )
+
+  execute_process(
+    COMMAND "${CMAKE_SOURCE_DIR}/tools/fetch_elfutils.sh" "${VER_ELF}" "${SHA256_ELF}"
+            "${ELFUTILS_PATH}" "${CMAKE_C_COMPILER}" "${EXTRA_CFLAGS}"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} COMMAND_ERROR_IS_FATAL ANY)
+else()
+  # Expect pre-built elfutils at ELFUTILS_PATH (from Conan, system packages, or manual install).
+  # Note: externally-provided elfutils won't have the musl patches applied by fetch_elfutils.sh,
+  # so this path only works on glibc systems.
+  find_library(LIBDW_PATH NAMES dw PATHS "${ELFUTILS_PATH}/lib" NO_DEFAULT_PATH)
+  find_library(LIBELF_PATH NAMES elf PATHS "${ELFUTILS_PATH}/lib" NO_DEFAULT_PATH)
+  find_library(LIBEU_PATH NAMES eu PATHS "${ELFUTILS_PATH}/src/lib" "${ELFUTILS_PATH}/lib"
+               NO_DEFAULT_PATH)
+  if(NOT LIBDW_PATH OR NOT LIBELF_PATH)
+    message(FATAL_ERROR
+      "elfutils not found at ${ELFUTILS_PATH}. "
+      "Set DDPROF_FETCH_ELFUTILS=ON to download and build from source, "
+      "or provide pre-built elfutils at ${ELFUTILS_PATH}/.")
+  endif()
 endif()
-
-message(
-  STATUS
-    "${CMAKE_SOURCE_DIR}/tools/fetch_elfutils.sh ${VER_ELF} ${SHA256_ELF} ${ELFUTILS_PATH} ${CMAKE_C_COMPILER} ${EXTRA_CFLAGS}"
-)
-
-execute_process(
-  COMMAND "${CMAKE_SOURCE_DIR}/tools/fetch_elfutils.sh" "${VER_ELF}" "${SHA256_ELF}"
-          "${ELFUTILS_PATH}" "${CMAKE_C_COMPILER}" "${EXTRA_CFLAGS}"
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} COMMAND_ERROR_IS_FATAL ANY)
 
 # Define eu library first since others depend on it
 add_library(eu STATIC IMPORTED)
